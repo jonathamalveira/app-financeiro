@@ -44,7 +44,6 @@ const MESES = [
   { id: '12', nome: 'Dezembro' },
 ];
 
-// Função para reproduzir os sons diretamente a partir da pasta public no servidor web
 const tocarSom = (tipo) => {
   try {
     let caminho = '';
@@ -64,6 +63,11 @@ const tocarSom = (tipo) => {
 };
 
 export default function App() {
+  const mesAtualStr = String(new Date().getMonth() + 1).padStart(2, '0');
+  const [mesSelecionado, setMesSelecionado] = useState(mesAtualStr);
+  const [modalMesVisible, setModalMesVisible] = useState(false);
+  const [modalAnualVisible, setModalAnualVisible] = useState(false);
+
   const [renda, setRenda] = useState('');
   const [rendaExtraDesc, setRendaExtraDesc] = useState('');
   const [rendaExtraValor, setRendaExtraValor] = useState('');
@@ -78,10 +82,6 @@ export default function App() {
   const [tipo, setTipo] = useState('fixa');
   const [bancoSelecionado, setBancoSelecionado] = useState('Nubank');
   const [modalBancoVisible, setModalBancoVisible] = useState(false);
-
-  const mesAtualStr = String(new Date().getMonth() + 1).padStart(2, '0');
-  const [mesSelecionado, setMesSelecionado] = useState(mesAtualStr);
-  const [modalMesVisible, setModalMesVisible] = useState(false);
 
   const [transacoes, setTransacoes] = useState([]);
   const [filtro, setFiltro] = useState('todas');
@@ -134,13 +134,14 @@ export default function App() {
   const adicionarRendaExtra = () => {
     if (!rendaExtraDesc || !rendaExtraValor) return;
     Vibration.vibrate([0, 50, 50, 50]);
-    tocarSom('dinheiro'); // Toca o som de dinheiro da pasta public
+    tocarSom('dinheiro');
 
     const valorNumerico = parseFloat(formatarNumeroInput(rendaExtraValor)) || 0;
     const novaRenda = {
       id: Date.now().toString(),
       descricao: rendaExtraDesc,
       valor: valorNumerico,
+      mes: mesSelecionado,
     };
     const atualizadas = [...listaRendasExtras, novaRenda];
     setListaRendasExtras(atualizadas);
@@ -218,11 +219,13 @@ export default function App() {
           style: 'destructive',
           onPress: () => {
             const novasTransacoes = transacoes.filter((t) => t.mes !== mesSelecionado);
+            const novasRendasExtras = listaRendasExtras.filter((r) => !r.mes || r.mes !== mesSelecionado);
             setTransacoes(novasTransacoes);
+            setListaRendasExtras(novasRendasExtras);
             setEditandoId(null);
             setDescricao('');
             setValor('');
-            salvarDadosNoDispositivo(novasTransacoes, listaRendasExtras, renda, nomeMeta, valorMeta, mesesMeta);
+            salvarDadosNoDispositivo(novasTransacoes, novasRendasExtras, renda, nomeMeta, valorMeta, mesesMeta);
           },
         },
       ]
@@ -248,7 +251,9 @@ export default function App() {
   };
 
   const rendaFixaNumerica = parseFloat(formatarNumeroInput(renda)) || 0;
-  const totalRendaExtra = listaRendasExtras.reduce((acc, r) => acc + r.valor, 0);
+  
+  const rendasExtrasDoMes = listaRendasExtras.filter((r) => !r.mes || r.mes === mesSelecionado);
+  const totalRendaExtra = rendasExtrasDoMes.reduce((acc, r) => acc + r.valor, 0);
   const rendaTotalGeral = rendaFixaNumerica + totalRendaExtra;
 
   const transacoesDoMes = transacoes.filter((t) => !t.mes || t.mes === mesSelecionado);
@@ -273,11 +278,10 @@ export default function App() {
   const aporteMensalNecessario = valorMetaNum > 0 && mesesMetaNum > 0 ? valorMetaNum / mesesMetaNum : 0;
   const consegueAtingirMeta = valorMetaNum > 0 && rendaTotalGeral > 0 && saldoRestante >= aporteMensalNecessario;
 
-  // Alerta tátil e som da pasta public quando os gastos ultrapassam a renda
   useEffect(() => {
     if (ultrapassou && !jaTocouAlertaRef.current) {
       Vibration.vibrate([0, 200, 100, 200, 100, 200]);
-      tocarSom('alerta'); // Toca o som de alerta da pasta public
+      tocarSom('alerta');
       jaTocouAlertaRef.current = true;
     } else if (!ultrapassou) {
       jaTocouAlertaRef.current = false;
@@ -304,6 +308,12 @@ export default function App() {
 
   const nomeMesSelecionado = MESES.find(m => m.id === mesSelecionado)?.nome || 'Mês';
 
+  // Cálculo para o Resumo Anual (Itaú Style)
+  const calcularTotalMes = (idMes) => {
+    const tMes = transacoes.filter((t) => t.mes === idMes);
+    return tMes.reduce((acc, t) => acc + t.valor, 0);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F2F2F7" />
@@ -311,10 +321,16 @@ export default function App() {
         <Text style={styles.titulo}>Jonatha Planilha de Gastos</Text>
         <Text style={styles.subtituloHeader}>Gestão Financeira Inteligente</Text>
 
-        <TouchableOpacity style={styles.cardSeletorMes} onPress={() => setModalMesVisible(true)}>
-          <Text style={styles.txtRotuloMes}>📅 Mês em Visualização:</Text>
-          <Text style={styles.txtMesAtivo}>{nomeMesSelecionado} ▼</Text>
-        </TouchableOpacity>
+        <View style={styles.linhaSeleitoresMes}>
+          <TouchableOpacity style={[styles.cardSeletorMes, { flex: 1, marginRight: 6 }]} onPress={() => setModalMesVisible(true)}>
+            <Text style={styles.txtRotuloMes}>📅 Mês:</Text>
+            <Text style={styles.txtMesAtivo}>{nomeMesSelecionado} ▼</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.botaoVisaoAnual} onPress={() => setModalAnualVisible(true)}>
+            <Text style={styles.txtBotaoAnual}>📊 Resumo Anual</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.cardRenda}>
           <Text style={styles.labelCard}>Renda Mensal Fixa (Salário)</Text>
@@ -332,7 +348,7 @@ export default function App() {
         </View>
 
         <View style={styles.cardRendaExtra}>
-          <Text style={styles.subtituloForm}>💰 Entrada Extra (13º, PIS, Hora Extra)</Text>
+          <Text style={styles.subtituloForm}>💰 Entrada Extra ({nomeMesSelecionado})</Text>
           <View style={styles.rowInput}>
             <TextInput
               style={[styles.input, { flex: 2, marginRight: 6 }]}
@@ -354,9 +370,9 @@ export default function App() {
             <Text style={styles.txtBtnRendaExtra}>+ Adicionar Renda Extra</Text>
           </TouchableOpacity>
 
-          {listaRendasExtras.length > 0 && (
+          {rendasExtrasDoMes.length > 0 && (
             <View style={styles.boxListaExtra}>
-              {listaRendasExtras.map((item) => (
+              {rendasExtrasDoMes.map((item) => (
                 <View key={item.id} style={styles.itemRendaExtra}>
                   <Text style={styles.txtItemExtra}>💵 {item.descricao}: +R$ {item.valor.toFixed(2)}</Text>
                   <TouchableOpacity onPress={() => removerRendaExtra(item.id)}>
@@ -454,7 +470,7 @@ export default function App() {
             {saldoRestante > 0 ? (
               <View>
                 <Text style={styles.textoInvestimento}>
-                  Com base no total recebido (R$ {rendaTotalGeral.toFixed(2)}):
+                  Com base no total recebido ({nomeMesSelecionado}):
                 </Text>
                 <View style={styles.boxDestaqueInvest}>
                   <Text style={styles.txtDestaqueInvest}>
@@ -473,7 +489,7 @@ export default function App() {
         {rendaTotalGeral > 0 && (
           <View style={styles.graficoBox}>
             <View style={styles.graficoHeader}>
-              <Text style={styles.graficoLabel}>Comprometimento da Renda Total</Text>
+              <Text style={styles.graficoLabel}>Comprometimento da Renda ({nomeMesSelecionado})</Text>
               <Text style={[styles.graficoPorc, ultrapassou && { color: '#FF3B30' }]}>
                 {porcentagemGasta.toFixed(0)}%
               </Text>
@@ -507,7 +523,7 @@ export default function App() {
 
         <View style={styles.form}>
           <Text style={styles.subtituloForm}>
-            {editandoId ? '✏️ Editar Lançamento' : '➕ Adicionar Nova Despesa'}
+            {editandoId ? '✏️ Editar Lançamento' : `➕ Adicionar Despesa (${nomeMesSelecionado})`}
           </Text>
           
           <TextInput
@@ -569,7 +585,7 @@ export default function App() {
 
         <View style={styles.cabecalhoListaContainer}>
           <Text style={styles.subtituloLista}>Histórico de Despesas ({nomeMesSelecionado})</Text>
-          {(transacoesDoMes.length > 0 || listaRendasExtras.length > 0) && (
+          {(transacoesDoMes.length > 0 || rendasExtrasDoMes.length > 0) && (
             <TouchableOpacity onPress={limparTudo}>
               <Text style={styles.txtZerar}>🗑️ Zerar Mês</Text>
             </TouchableOpacity>
@@ -629,7 +645,7 @@ export default function App() {
             </View>
           )}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>Nenhuma despesa encontrada neste mês/filtro.</Text>
+            <Text style={styles.emptyText}>Nenhuma despesa encontrada em {nomeMesSelecionado}.</Text>
           }
         />
       </ScrollView>
@@ -695,6 +711,47 @@ export default function App() {
         </View>
       </Modal>
 
+      {/* MODAL RESUMO ANUAL (VISÃO GERAL POR MÊS) */}
+      <Modal visible={modalAnualVisible} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitulo}>📊 Resumo Anual de Gastos</Text>
+            <Text style={styles.modalSubTitulo}>Clique num mês para abrir os detalhes:</Text>
+            
+            <ScrollView style={{ maxHeight: 380 }}>
+              {MESES.map((m) => {
+                const totalM = calcularTotalMes(m.id);
+                const isAtivo = mesSelecionado === m.id;
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[styles.modalItemAnual, isAtivo && styles.modalItemAnualAtivo]}
+                    onPress={() => {
+                      setMesSelecionado(m.id);
+                      setModalAnualVisible(false);
+                    }}
+                  >
+                    <Text style={[styles.txtMesAnual, isAtivo && { fontWeight: 'bold', color: '#007AFF' }]}>
+                      {m.nome} {isAtivo ? ' (Atual)' : ''}
+                    </Text>
+                    <Text style={[styles.txtValorAnual, totalM > 0 ? { color: '#FF3B30' } : { color: '#8E8E93' }]}>
+                      R$ {totalM.toFixed(2)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={styles.modalBotaoFechar} 
+              onPress={() => setModalAnualVisible(false)}
+            >
+              <Text style={styles.modalBotaoFecharTxt}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -722,6 +779,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
+  linhaSeleitoresMes: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
   cardSeletorMes: {
     backgroundColor: '#007AFF',
     padding: 12,
@@ -729,17 +790,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+  },
+  botaoVisaoAnual: {
+    backgroundColor: '#1C1C1E',
+    padding: 12,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+  },
+  txtBotaoAnual: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 13,
   },
   txtRotuloMes: {
     color: '#FFFFFF',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   txtMesAtivo: {
     color: '#FFFFFF',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 14,
   },
   cardRenda: {
     backgroundColor: '#FFFFFF',
@@ -954,28 +1027,28 @@ const styles = StyleSheet.create({
     color: '#636366',
   },
   cardProjecao: {
-    backgroundColor: '#E8F2FF',
+    backgroundColor: '#F0F4FF',
     padding: 14,
     borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: 12,
     borderLeftWidth: 5,
     borderLeftColor: '#007AFF',
   },
   tituloProjecao: {
     fontWeight: 'bold',
-    color: '#004085',
-    marginBottom: 4,
+    color: '#004080',
+    marginBottom: 6,
+    fontSize: 15,
   },
   textoProjecao: {
-    color: '#333333',
+    color: '#003366',
     fontSize: 13,
-    lineHeight: 18,
   },
   form: {
     backgroundColor: '#FFFFFF',
     padding: 14,
     borderRadius: 12,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   subtituloForm: {
     fontSize: 15,
@@ -987,55 +1060,50 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F7',
     borderRadius: 8,
     padding: 10,
-    marginBottom: 10,
-    fontSize: 15,
+    fontSize: 14,
     color: '#1C1C1E',
+    marginBottom: 10,
   },
   seletorBancoBotao: {
     backgroundColor: '#F2F2F7',
     borderRadius: 8,
     padding: 10,
-    marginBottom: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 10,
   },
   txtRotuloBanco: {
+    color: '#3A3A3C',
     fontSize: 14,
-    color: '#636366',
   },
   txtBancoEscolhido: {
-    fontSize: 14,
+    color: '#007AFF',
     fontWeight: 'bold',
-    color: '#1C1C1E',
+    fontSize: 14,
   },
   seletorTipo: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   btnTipo: {
     flex: 1,
     padding: 10,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#C7C7CC',
+    backgroundColor: '#F2F2F7',
     alignItems: 'center',
     marginHorizontal: 3,
-    backgroundColor: '#F9F9FB',
   },
   btnTipoFixaAtivo: {
-    backgroundColor: '#FFCC00',
-    borderColor: '#E5B800',
+    backgroundColor: '#007AFF',
   },
   btnTipoVarAtivo: {
-    backgroundColor: '#007AFF',
-    borderColor: '#005EC4',
+    backgroundColor: '#FF9500',
   },
   txtTipo: {
     color: '#3A3A3C',
-    fontWeight: '600',
     fontSize: 13,
+    fontWeight: '600',
   },
   txtTipoAtivo: {
     color: '#FFFFFF',
@@ -1046,21 +1114,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  botaoCancelar: {
-    backgroundColor: '#8E8E93',
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 6,
-  },
   textoBotao: {
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 15,
   },
+  botaoCancelar: {
+    backgroundColor: '#FF3B30',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
   textoBotaoCancelar: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: 'bold',
     fontSize: 13,
   },
   cabecalhoListaContainer: {
@@ -1070,14 +1138,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subtituloLista: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#1C1C1E',
   },
   txtZerar: {
-    fontSize: 12,
     color: '#FF3B30',
     fontWeight: 'bold',
+    fontSize: 13,
   },
   filtrosRow: {
     flexDirection: 'row',
@@ -1085,14 +1153,14 @@ const styles = StyleSheet.create({
   },
   filtroBtn: {
     flex: 1,
-    paddingVertical: 6,
+    padding: 8,
     backgroundColor: '#E5E5EA',
+    borderRadius: 8,
     alignItems: 'center',
-    borderRadius: 6,
-    marginHorizontal: 2,
+    marginHorizontal: 3,
   },
   filtroAtivo: {
-    backgroundColor: '#3A3A3C',
+    backgroundColor: '#1C1C1E',
   },
   filtroTxt: {
     fontSize: 12,
@@ -1105,54 +1173,52 @@ const styles = StyleSheet.create({
   tabelaHeader: {
     flexDirection: 'row',
     backgroundColor: '#E5E5EA',
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 6,
+    padding: 8,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
   },
   colHeader: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#48484A',
+    color: '#3A3A3C',
   },
   tabelaLinha: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     padding: 10,
-    borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
   },
   colTexto: {
-    fontSize: 14,
-    color: '#007AFF',
-    textDecorationLine: 'underline',
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#1C1C1E',
   },
   colSubTexto: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#007AFF',
     marginTop: 2,
+    fontWeight: '600',
   },
   colBadge: {
     fontSize: 10,
     fontWeight: 'bold',
     paddingVertical: 3,
     paddingHorizontal: 6,
-    borderRadius: 6,
+    borderRadius: 4,
     overflow: 'hidden',
-    textAlign: 'center',
   },
   badgeFixa: {
-    backgroundColor: '#FFE600',
-    color: '#5C4300',
+    backgroundColor: '#E0F2FE',
+    color: '#0369A1',
   },
   badgeVar: {
-    backgroundColor: '#E5E5EA',
-    color: '#3A3A3C',
+    backgroundColor: '#FEF3C7',
+    color: '#B45309',
   },
   colValor: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     color: '#FF3B30',
     textAlign: 'right',
@@ -1167,7 +1233,11 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     color: '#8E8E93',
-    marginTop: 15,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    fontSize: 13,
   },
   modalOverlay: {
     flex: 1,
@@ -1177,7 +1247,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     maxHeight: '80%',
   },
@@ -1185,6 +1255,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1C1C1E',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  modalSubTitulo: {
+    fontSize: 13,
+    color: '#636366',
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -1192,34 +1268,56 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: '#F2F2F7',
   },
   modalItemAtivo: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F0F4FF',
     borderRadius: 8,
-    paddingHorizontal: 8,
+  },
+  modalItemAnual: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  modalItemAnualAtivo: {
+    backgroundColor: '#F0F4FF',
+    borderRadius: 8,
+  },
+  txtMesAnual: {
+    fontSize: 15,
+    color: '#1C1C1E',
+    fontWeight: '500',
+  },
+  txtValorAnual: {
+    fontSize: 15,
+    fontWeight: 'bold',
   },
   bolaCorBanco: {
     width: 14,
     height: 14,
     borderRadius: 7,
-    marginRight: 12,
+    marginRight: 10,
   },
   modalItemTxt: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#1C1C1E',
   },
   modalBotaoFechar: {
-    marginTop: 16,
-    backgroundColor: '#8E8E93',
+    backgroundColor: '#E5E5EA',
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
+    marginTop: 12,
   },
   modalBotaoFecharTxt: {
-    color: '#FFFFFF',
+    color: '#1C1C1E',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 14,
   },
 });
