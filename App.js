@@ -308,7 +308,6 @@ export default function App() {
 
   const nomeMesSelecionado = MESES.find(m => m.id === mesSelecionado)?.nome || 'Mês';
 
-  // Cálculo para o Resumo Anual (Itaú Style)
   const calcularTotalMes = (idMes) => {
     const tMes = transacoes.filter((t) => t.mes === idMes);
     return tMes.reduce((acc, t) => acc + t.valor, 0);
